@@ -1,0 +1,342 @@
+import numpy as np 
+import pandas as pd 
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+from itertools import combinations
+import seaborn as sns
+import matplotlib.pyplot as plt
+dataset_csv_path='/kaggle/input/cicids2017/MachineLearningCSV/MachineLearningCVE/'
+csv_file_names= ['Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv'
+,'Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv',
+'Friday-WorkingHours-Morning.pcap_ISCX.csv'
+,'Monday-WorkingHours.pcap_ISCX.csv',
+'Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv',
+'Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv',
+'Tuesday-WorkingHours.pcap_ISCX.csv',
+'Wednesday-workingHours.pcap_ISCX.csv']
+full_path=[]
+for csv_file in csv_file_names:
+    full_path.append(os.path.join(dataset_csv_path,csv_file))
+df = pd.concat(map(pd.read_csv,full_path),ignore_index=True)
+df.head()
+print("The columns present in the dataset are: ",df.columns)
+df.info()
+
+df.describe()
+
+df[' Label'].nunique()
+
+def data_cleaning(df):
+    df.columns=df.columns.str.strip()
+    print("Dataset Shape: ",df.shape)
+    
+    num=df._get_numeric_data()
+    num[num<0]=0
+    
+    zero_variance_cols=[]
+    for col in df.columns:
+        if len(df[col].unique()) == 1:
+            zero_variance_cols.append(col)
+    df.drop(columns=zero_variance_cols, axis=1, inplace=True)
+    print("Zero Variance Columns: ", zero_variance_cols, "are dropped.")
+    print("Shape after removing the zero varaince columns: ",df.shape)
+    
+    df.replace([np.inf,-np.inf],np.nan,inplace=True)
+    print(df.isna().any(axis=1).sum(),"rows dropped")
+    df.dropna(inplace=True)
+    print("Shape after Removing NaN: ",df.shape)
+    
+    df.drop_duplicates(inplace=True)
+    print("Shape after dropping duplicates: ",df.shape)
+    
+    column_pairs = [(i,j) for i,j in combinations(df,2) if df[i].equals(df[j])]
+    ide_cols=[]
+    for col_pair in column_pairs:
+        ide_cols.append(col_pair[1])
+    df.drop(columns=ide_cols,axis=1,inplace=True)
+    print("Columns which have identical values: ",column_pairs," dropped!")
+    print("Shape after removing identical value columns: ",df.shape)
+    return df
+df=data_cleaning(df)
+
+df['Label'].value_counts()
+
+plt.figure(figsize=(12,6))
+plot=sns.countplot(data=df['Label'],y=df['Label'].loc[df['Label']!='BEGINE'])
+plt.xscale('log')
+fig=plot.get_figure()
+fig.savefig('img1.png')
+
+from sklearn.decomposition import PCA 
+subsample_df=df.groupby('Label').apply(pd.DataFrame.sample,frac=0.1).reset_index(drop=True)
+x=subsample_df.drop(['Label'],axis=1)
+y=subsample_df['Label']
+
+pca=PCA(n_components=2, random_state=0)
+z=pca.fit_transform(x)
+
+pca_df=pd.DataFrame()
+pca_df['Label']=y
+pca_df['PCA 1']=z[:,0]
+pca_df['PCA 2']=z[:,1]
+
+sns.scatterplot(data=pca_df,x='PCA 1',y='PCA 2',hue='Label',palette=sns.color_palette('hls',len(pca_df.Label.value_counts()))).set_title("CICIDS2017 PCA Projection")
+plt.legend(loc='center left',bbox_to_anchor=(1,0.5))
+plt.show()
+
+ pca_df.loc[pca_df.Label !='BENIGN','Label']='ATTACK'
+ sns.scatterplot(data=pca_df,x='PCA 1',y='PCA 2',hue=pca_df.Label,palette=sns.color_palette('hls',2)).set_title("CICIDS2017 Binary Class PCA Projection")
+ plt.legend(loc='center left',bbox_to_anchor=(1,0.5))
+ plt.show()
+
+df.columns=df.columns.str.strip().str.lower().str.replace(' ','_').str.replace('(','').str.replace(')','')
+df.head()
+
+df['label'].value_counts()
+
+new_df=df.copy()
+
+df.loc[df['label']!='BENIGN','label']='ATTACK'
+df.head()
+
+df['label'].value_counts()
+
+new_df=df.copy()
+
+df.loc[df['label']!='BENIGN','label']='ATTACK'
+df.head()
+
+df.label.value_counts()
+
+sns.countplot(data=df,x=df['label'])
+
+size=len(df.loc[df.label=='ATTACK'])
+print(size)
+bal_df=df.groupby('label').apply(lambda x: x.sample(n=min(size,len(x))))
+
+sns.countplot(data=bal_df,x='label')
+
+bal_df.shape
+
+import gc
+gc.collect()
+
+bal_df.loc[bal_df['label']== 'ATTACK','label']=1
+bal_df.loc[bal_df['label']=='BENIGN','label']=0
+
+type(bal_df.label)
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+X=bal_df.drop(columns='label')
+y=bal_df['label'].astype('int')
+X=MinMaxScaler().fit_transform(X)
+
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2)
+print(X_train.shape," ",X_test.shape)
+print(y_train.shape," ",y_test.shape)
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler,LabelEncoder
+Xn=new_df.drop(columns='label')
+Xn=MinMaxScaler().fit_transform(Xn)
+yn=new_df['label']
+yn=LabelEncoder().fit_transform(yn)
+Xn_train,Xn_test,yn_train,yn_test=train_test_split(Xn,yn,test_size=0.2)
+
+print(Xn_test.shape,Xn_train.shape)
+print(yn_test.shape,yn_train.shape)
+
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2)
+print(X_train.shape," ",X_test.shape)
+print(y_train.shape," ",y_test.shape)
+
+from keras.layers import Input, Dense
+from keras.models import Model
+from tensorflow.keras.utils import plot_model
+
+input_data = Input(shape=(65,))
+encoded = Dense(32, activation='relu')(input_data)
+decoded = Dense(65, activation='sigmoid')(encoded)
+
+autoencoder = Model(input_data, decoded)
+autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
+plot_model(autoencoder, show_shapes=True)
+D
+encoder = Model(input_data, encoded)
+encoded_input = Input(shape=(32,))
+decoder_layer = autoencoder.layers[-1]
+decoder = Model(encoded_input, decoder_layer(encoded_input))
+
+history=autoencoder.fit(Xn_train,Xn_train,epochs=50,batch_size=64,validation_data=(X_test,X_test),verbose=1)
+encoded_data=encoder.predict(X_test)
+decoded_data=decoder.predict(encoded_data)
+
+plt.plot(history.history['loss'],label='train')
+plt.plot(history.history['val_loss'],label='test')
+plt.legend()
+plt.show()
+
+import seaborn as sns 
+import sklearn 
+import imblearn 
+import time  
+import sklearn.metrics as m 
+from keras import Input
+from keras.optimizers import Adam
+import tensorflow as tf
+tf.keras.backend.clear_session()
+from tensorflow.keras.layers import Input, Dense, BatchNormalization, Activation
+from tensorflow.keras.models import Model
+
+import warnings 
+warnings.filterwarnings('ignore')
+
+latent_dim = 50 
+hidden_layer_size = 80
+batch_size = 50
+convergence_threshold = 0.058
+max_epochs= 10a
+
+def build_generator(latent_dim, hidden_layer_size):
+    generator_input = Input(shape=(latent_dim,))
+    
+    # Add batch normalization and ReLU activation to the hidden layer
+    x = Dense(hidden_layer_size)(generator_input)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    
+    # Output layer with appropriate size
+    generator_output = Dense(input_shape[0])(x)
+    
+    generator = Model(generator_input, generator_output)
+    return generator
+
+def build_discriminator(input_shape, hidden_layer_size):
+    discriminator_input = Input(shape=input_shape)
+    
+    # Add batch normalization and ReLU activation to the hidden layer
+    x = Dense(hidden_layer_size)(discriminator_input)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    
+    # Output layer with appropriate size
+    discriminator_output = Dense(input_shape[0])(x)
+    
+    discriminator = Model(discriminator_input, discriminator_output)
+    return discriminator
+
+# Define input shape
+input_shape = (28, 28, 1)  # Example shape, adjust according to your data
+
+# Define latent dimension and hidden layer size
+latent_dim = 100
+hidden_layer_size = 128
+
+# Build generator and discriminator
+generator = build_generator(latent_dim, hidden_layer_size)
+discriminator = build_discriminator(input_shape, hidden_layer_size)
+
+# Compile the discriminator model
+# Your code for compiling the discriminator model goes here
+def build_generator(latent_dim, hidden_layer_size, input_shape):
+    generator_input = Input(shape=(latent_dim,))
+    
+    # Add batch normalization and ReLU activation to the hidden layer
+    x = Dense(hidden_layer_size)(generator_input)
+    x = BatchNormalization()(x)
+    x = Activation('relu')(x)
+    
+    # Output layer with appropriate size
+    generator_output = Dense(input_shape[0])(x)
+    
+    generator = Model(generator_input, generator_output)
+    return generator
+
+generator = build_generator(latent_dim, hidden_layer_size, input_shape)
+discriminator = build_discriminator(input_shape, hidden_layer_size)
+
+# Compile the discriminator model
+discriminator.compile(loss='mean_squared_error', optimizer=Adam(learning_rate=0.0002))
+
+from keras.layers import Dense, Flatten, Reshape
+from keras.models import Sequential
+
+random_latent_samples = np.random.rand(10, 10)
+
+generator = Sequential([
+    Dense(128, activation='relu', input_dim=random_latent_samples.shape[1]),
+    Dense(784, activation='sigmoid'),
+    Reshape((28, 28, 1))
+])
+
+discriminator = Sequential([
+    Flatten(input_shape=(28, 28, 1)),
+    Dense(128, activation='relu'),
+    Dense(1, activation='sigmoid')
+])
+
+discriminator.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+discriminator.trainable = False
+
+# Define GAN model
+gan = Sequential([
+    generator,
+    discriminator
+])
+
+# Compile GAN
+gan.compile(optimizer='adam', loss='binary_crossentropy')
+
+def Discriminator(input_dim):
+     latent_dim = 50
+     hidden_dim = 80
+     reconstruction_acc = 0.97
+     max_epochs = 300
+     input_dim = input_dim
+     discriminator = keras.Sequential([
+         layers.Input(shape=(input_dim,)), 
+         layers.Dense(hidden_dim),
+         layers.BatchNormalization(),
+         layers.ReLU(),
+         layers.Dense(latent_dim),
+         layers.BatchNormalization(),
+         layers.ReLU(),
+         layers.Dense(hidden_dim),
+         layers.BatchNormalization(),
+         layers.ReLU(),
+         layers.Dense(input_dim)
+     ])
+
+def Generator():
+     latent_dim = 50
+     hidden_dim = 80
+     reconstruction_acc = 0.058
+     max_epochs = 250
+     generator_input = Input(shape =  (latent_dim,))
+     labels = Input(shape = (1,))
+    
+     x = concatenate([generator_input,label_dim])
+     x = Dense(80, activation="relu")(x)
+     x = BatchNormalization()(x)
+     x = Dense("Add the input size")(x)
+    
+     x = concatenate(x,labels)
+    
+     return x
+
+# Train autoregressive model
+model = AutoReg(y_train, lags=lags)
+model_fit = model.fit()
+
+predictions = model_fit.predict(start=len(X_train), end=len(X_train) + len(X_test) - 1, dynamic=False)
+
+# Convert predictions to binary (anomaly or not)
+predictions_binary = [1 if pred > threshold else 0 for pred in predictions]
+
+# Evaluate the model
+accuracy = accuracy_score(y_test, predictions_binary)
+print("Accuracy:", accuracy)
